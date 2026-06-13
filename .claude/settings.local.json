@@ -1,0 +1,33 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(java -version)",
+      "Bash(mvn -version)",
+      "Bash(gradle -version)",
+      "Bash(npm --version)",
+      "Bash(pip3 --version)",
+      "Bash(docker --version)",
+      "Bash(docker compose *)",
+      "Bash(sudo apt-get install -y openjdk-17-jdk-headless maven)",
+      "Bash(wget -qO- https://debian.neo4j.com/neotechnology.gpg.key)",
+      "Bash(sudo gpg --dearmor -o /usr/share/keyrings/neo4j.gpg)",
+      "Bash(sudo tee /etc/apt/sources.list.d/neo4j.list)",
+      "Bash(sudo apt-get update -qq)",
+      "Bash(sudo apt-get install -y neo4j)",
+      "Bash(sudo neo4j-admin dbms set-initial-password code2graph)",
+      "Bash(sudo systemctl enable --now neo4j)",
+      "Bash(sudo systemctl is-active neo4j)",
+      "Bash(apt-cache policy *)",
+      "Bash(curl -fsSL https://debian.neo4j.com/neotechnology.gpg.key -o /tmp/neo4j.key)",
+      "Read(//tmp/**)",
+      "Bash(sudo gpg --dearmor --yes -o /usr/share/keyrings/neo4j.gpg /tmp/neo4j.key)",
+      "Bash(sudo chmod 644 /usr/share/keyrings/neo4j.gpg)",
+      "Bash(git clone *)",
+      "Bash(dpkg -l neo4j)",
+      "Bash(python3 -c \"import sys,json;[print\\(' ',n['label'],n['name']\\) for n in json.load\\(sys.stdin\\)]\")",
+      "Bash(python3 -)",
+      "Bash(npm run *)",
+      "Bash(pkill -f \"uvicorn app.main:app\")"
+    ]
+  }
+}

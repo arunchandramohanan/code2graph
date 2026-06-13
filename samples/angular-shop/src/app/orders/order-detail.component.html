@@ -1,0 +1,9 @@
+<ng-container *ngIf="order as o">
+  <h2>Order #{{ o.id }}</h2>
+  <p>{{ o.customerName }} — {{ o.status }}</p>
+  <ul>
+    <li *ngFor="let item of o.items">
+      {{ item.quantity }} × {{ item.productName }} ({{ item.unitPrice | currency }})
+    </li>
+  </ul>
+</ng-container>

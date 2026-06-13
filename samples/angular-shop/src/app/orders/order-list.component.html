@@ -1,0 +1,8 @@
+<h2>Orders</h2>
+<p *ngIf="loading">Loading…</p>
+<app-order-card
+  *ngFor="let order of orders"
+  [order]="order"
+  (open)="openOrder($event)"
+  (cancelled)="cancelOrder($event)"
+></app-order-card>

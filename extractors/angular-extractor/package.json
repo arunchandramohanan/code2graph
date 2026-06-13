@@ -1,0 +1,21 @@
+{
+  "name": "angular-extractor",
+  "version": "1.0.0",
+  "description": "Deterministic Angular code extractor producing code2graph JSON (see docs/CONTRACTS.md)",
+  "type": "module",
+  "bin": {
+    "angular-extractor": "dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "extract": "node dist/index.js"
+  },
+  "dependencies": {
+    "@angular/compiler": "^19.2.0",
+    "ts-morph": "^24.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.0",
+    "typescript": "^5.6.0"
+  }
+}
