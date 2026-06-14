@@ -65,6 +65,8 @@ export default function GraphExplorer() {
   const [labels, setLabels] = useState(() => new Set(NODE_LABELS));
   const [edgeTypes, setEdgeTypes] = useState(() => new Set(EDGE_TYPES));
   const [depth, setDepth] = useState(2);
+  const [dominantOnly, setDominantOnly] = useState(true);
+  const [displayOpen, setDisplayOpen] = useState(false);
   const [graph, setGraph] = useState({ nodes: [], edges: [] });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -119,10 +121,52 @@ export default function GraphExplorer() {
     [project, pushToast]
   );
 
+  // "dominantOnly" keeps only the largest connected component (the main graph).
+  // Skipped while focused on a node — there the neighborhood is the intent.
+  const displayGraph = useMemo(() => {
+    let nodes = graph.nodes || [];
+    let edges = graph.edges || [];
+
+    if (dominantOnly && !focus && nodes.length > 1) {
+      const adj = new Map(nodes.map((n) => [n.id, []]));
+      edges.forEach((e) => {
+        if (adj.has(e.source) && adj.has(e.target)) {
+          adj.get(e.source).push(e.target);
+          adj.get(e.target).push(e.source);
+        }
+      });
+      const seen = new Set();
+      let best = new Set();
+      for (const start of adj.keys()) {
+        if (seen.has(start)) continue;
+        const comp = new Set([start]);
+        const stack = [start];
+        seen.add(start);
+        while (stack.length) {
+          for (const nb of adj.get(stack.pop())) {
+            if (!seen.has(nb)) {
+              seen.add(nb);
+              comp.add(nb);
+              stack.push(nb);
+            }
+          }
+        }
+        if (comp.size > best.size) best = comp;
+      }
+      nodes = nodes.filter((n) => best.has(n.id));
+      const ids = new Set(nodes.map((n) => n.id));
+      edges = edges.filter((e) => ids.has(e.source) && ids.has(e.target));
+    }
+
+    return { nodes, edges };
+  }, [graph, dominantOnly, focus]);
+
+  const hiddenCount = (graph.nodes || []).length - (displayGraph.nodes || []).length;
+
   const visibleLabels = useMemo(() => {
-    const set = new Set((graph.nodes || []).map((n) => n.label).filter(Boolean));
+    const set = new Set((displayGraph.nodes || []).map((n) => n.label).filter(Boolean));
     return [...set];
-  }, [graph]);
+  }, [displayGraph]);
 
   return (
     <div className="page page-fill">
@@ -145,19 +189,6 @@ export default function GraphExplorer() {
               ))}
             </select>
             {view && <div className="muted small">Preset filters; switch to Custom to use the checkboxes</div>}
-          </div>
-          <div className="filter-group">
-            <div className="filter-group-head">
-              <span className="filter-group-title">Depth: {depth}</span>
-            </div>
-            <input
-              type="range"
-              min="1"
-              max="4"
-              value={depth}
-              onChange={(e) => setDepth(Number(e.target.value))}
-            />
-            <div className="muted small">Applies when focused on a node</div>
           </div>
           {focus && (
             <div className="focus-banner">
@@ -191,6 +222,49 @@ export default function GraphExplorer() {
             </>
           )}
           <Legend labels={visibleLabels} />
+          <div className="filter-group display-options">
+            <button
+              type="button"
+              className="disclosure-head"
+              onClick={() => setDisplayOpen((o) => !o)}
+            >
+              <span className="filter-group-title">Display options</span>
+              <span className="disclosure-chevron">{displayOpen ? '▾' : '▸'}</span>
+            </button>
+            {displayOpen && (
+              <div className="disclosure-body">
+                <div className="filter-subgroup">
+                  <span className="filter-group-title">Depth: {depth}</span>
+                  <input
+                    type="range"
+                    min="1"
+                    max="4"
+                    value={depth}
+                    onChange={(e) => setDepth(Number(e.target.value))}
+                  />
+                  <div className="muted small">Applies when focused on a node</div>
+                </div>
+                <div className="filter-subgroup">
+                  <label className="checkbox-row">
+                    <input
+                      type="checkbox"
+                      checked={dominantOnly}
+                      onChange={(e) => setDominantOnly(e.target.checked)}
+                    />
+                    <span>Show only the main graph</span>
+                  </label>
+                  {dominantOnly && !focus && hiddenCount > 0 && (
+                    <div className="muted small">
+                      {hiddenCount} off-graph node{hiddenCount === 1 ? '' : 's'} hidden
+                    </div>
+                  )}
+                  {focus && dominantOnly && (
+                    <div className="muted small">Main-graph filter pauses while focused on a node</div>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
         </aside>
 
         <div className="explorer-canvas">
@@ -204,7 +278,7 @@ export default function GraphExplorer() {
             </div>
           )}
           <GraphCanvas
-            graph={graph}
+            graph={displayGraph}
             selectedId={selectedId}
             onNodeClick={(d) => setSelectedId(d.id)}
             onNodeDblClick={(d) => expandNode(d.id)}

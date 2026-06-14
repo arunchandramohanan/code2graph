@@ -881,6 +881,26 @@ function resolveUrlExpression(ctx: Ctx, info: ClassInfo, expr: Expression, depth
     return null;
   }
 
+  // URL-builder helper calls — JHipster's
+  // `applicationConfigService.getEndpointFor('api/foo'[, 'microservice'])` and similar.
+  // The first string argument carries the path; later args (microservice name) are ignored.
+  if (Node.isCallExpression(e)) {
+    const callee = e.getExpression();
+    const methodName = Node.isPropertyAccessExpression(callee)
+      ? callee.getName()
+      : Node.isIdentifier(callee)
+        ? callee.getText()
+        : '';
+    if (/endpoint|resourceurl|apiurl|buildurl|tourl/i.test(methodName)) {
+      const args = e.getArguments();
+      if (args.length > 0) {
+        const resolved = resolveUrlExpression(ctx, info, args[0] as Expression, depth + 1);
+        if (resolved !== null) return resolved;
+      }
+    }
+    return null;
+  }
+
   return null;
 }
 

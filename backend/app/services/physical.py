@@ -78,11 +78,18 @@ def extract_physical(project: str, roots: dict) -> dict:
         if not root.is_dir():
             continue
 
-        for f in _walk(root, ["docker-compose*.yml", "docker-compose*.yaml", "compose.yml", "compose.yaml"]):
+        # Compose files: conventional names + anything under a docker/ directory
+        # (JHipster keeps app.yml / services.yml / postgresql.yml under src/main/docker).
+        compose_files = _walk(root, [
+            "docker-compose*.yml", "docker-compose*.yaml", "compose.yml", "compose.yaml",
+            "*/docker/*.yml", "*/docker/*.yaml",
+        ])
+        for f in compose_files:
             stats["deployments"] += _extract_compose(project, root, f, compose_services)
 
+        compose_paths = {f for f in compose_files}
         for f in _walk(root, ["*.yml", "*.yaml"]):
-            if "docker-compose" in f.name or f.name.startswith("application"):
+            if f in compose_paths or "docker-compose" in f.name or f.name.startswith("application"):
                 continue
             stats["deployments"] += _extract_k8s(project, root, f)
 
@@ -185,6 +192,31 @@ def _extract_k8s(project: str, root: Path, file: Path) -> int:
 
 JDBC_RE = re.compile(r"jdbc:(\w+)://([^/:]+)(?::(\d+))?/([\w-]+)")
 
+# H2/HSQLDB embedded: jdbc:h2:mem:name;..  jdbc:h2:file:./path/name;..  jdbc:h2:tcp://host/name
+_EMBEDDED_MODES = {"mem", "file", "tcp", "ssl", "zip", "nio"}
+
+
+def _parse_jdbc(url: str) -> tuple[str, str, str, str]:
+    """Return (vendor, host, port, dbname) for both server and embedded JDBC URLs."""
+    vendor_m = re.match(r"jdbc:(\w+):", url)
+    vendor = vendor_m.group(1) if vendor_m else "unknown"
+
+    # server form: jdbc:vendor://host[:port]/db
+    server = re.search(r"://([^/:;?]+)(?::(\d+))?/([\w$-]+)", url)
+    if server:
+        return vendor, server.group(1), server.group(2) or "", server.group(3)
+
+    # embedded form: drop params, strip vendor + mode prefixes, take the final token
+    tail = url.split(";")[0].split("?")[0]
+    parts = [p for p in tail.split(":") if p]
+    candidates = [
+        p.rsplit("/", 1)[-1].rsplit("\\", 1)[-1]
+        for p in parts[2:]  # skip "jdbc" and vendor
+        if p not in _EMBEDDED_MODES and not p.isdigit()
+    ]
+    dbname = candidates[-1] if candidates else vendor
+    return vendor, "", "", dbname
+
 
 def _extract_datasource(project: str, root: Path, file: Path, java_app: str | None,
                         compose_services: dict) -> int:
@@ -222,11 +254,7 @@ def _extract_datasource(project: str, root: Path, file: Path, java_app: str | No
     url = str(url)
     # resolve ${ENV:default} placeholders to the default
     url_resolved = re.sub(r"\$\{[^:}]+:([^}]*)\}", r"\1", url)
-    match = JDBC_RE.search(url_resolved)
-    vendor = match.group(1) if match else "unknown"
-    host = match.group(2) if match else ""
-    port = match.group(3) if match else ""
-    dbname = match.group(4) if match else url_resolved.split("/")[-1]
+    vendor, host, port, dbname = _parse_jdbc(url_resolved)
 
     node_id = f"infra:datasource:{project}:{dbname}"
     _merge_node(node_id, "Datasource", project, dbname, {

@@ -24,6 +24,11 @@ VIEW_PRESETS = {
         "where": "n.label IN ['Controller','Service','Component','Endpoint','Entity',"
                  "'DTO','Repository','ApiCall','Route']",
         "edges": None,  # all edges between the selected nodes
+        # Collapse the (excluded) Method hop into direct class-level edges so the
+        # high-level view doesn't fragment: Service/Component -> ApiCall and
+        # Component/Service -> Service/Repository. Value = label set to keep.
+        "collapse": ["Controller", "Service", "Component", "Endpoint", "Entity",
+                     "DTO", "Repository", "ApiCall", "Route"],
     },
     "development": {
         "where": "n.label IN ['Application','Module','File']",
@@ -137,6 +142,37 @@ def _sum_by(rows: list[dict], key: str) -> dict:
     return out
 
 
+def _add_collapsed_edges(project: str, payload: dict, keep_labels: list[str]) -> None:
+    """Synthesize class-level edges by collapsing the excluded Method hop, so the
+    logical view stays connected: owner -> ApiCall (via MAKES_CALL) and owner ->
+    owner (via method CALLS). Only edges between already-present nodes are added."""
+    present = {n["id"] for n in payload["nodes"]}
+    existing = {e["id"] for e in payload["edges"]}
+    syn = db.run(
+        """
+        MATCH (owner:CodeNode {project:$p})-[:DECLARES]->(:Method)-[:MAKES_CALL]->(a:ApiCall {project:$p})
+        WHERE owner.label IN $labels
+        RETURN DISTINCT owner.id AS s, 'MAKES_CALL' AS ty, a.id AS o
+        UNION
+        MATCH (oa:CodeNode {project:$p})-[:DECLARES]->(:Method)-[:CALLS]->(:Method)<-[:DECLARES]-(ob:CodeNode {project:$p})
+        WHERE oa.label IN $labels AND ob.label IN $labels AND oa <> ob
+        RETURN DISTINCT oa.id AS s, 'CALLS' AS ty, ob.id AS o
+        """,
+        p=project, labels=keep_labels,
+    )
+    for r in syn:
+        if r["s"] not in present or r["o"] not in present:
+            continue
+        key = f"{r['s']}|{r['ty']}|{r['o']}"
+        if key in existing:
+            continue
+        existing.add(key)
+        payload["edges"].append({
+            "id": key, "source": r["s"], "target": r["o"],
+            "type": r["ty"], "props": {"collapsed": True},
+        })
+
+
 def subgraph(project: str, node_id: str | None, depth: int, labels: list[str] | None,
              edge_types: list[str] | None, limit: int, view: str | None = None) -> dict:
     if view and not node_id:
@@ -159,6 +195,8 @@ def subgraph(project: str, node_id: str | None, depth: int, labels: list[str] | 
             p=project,
         )
         payload = _graph_payload(rows)
+        if preset.get("collapse"):
+            _add_collapsed_edges(project, payload, preset["collapse"])
         if preset["edges"]:
             keep = set(preset["edges"])
             payload["edges"] = [e for e in payload["edges"] if e["type"] in keep]
