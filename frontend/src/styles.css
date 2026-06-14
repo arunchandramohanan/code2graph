@@ -617,3 +617,10 @@ input[type='checkbox'] { accent-color: var(--accent); }
 .disclosure-body { margin-top: 10px; display: flex; flex-direction: column; gap: 14px; }
 .filter-subgroup { display: flex; flex-direction: column; gap: 4px; }
 .filter-subgroup input[type="range"] { width: 100%; }
+
+/* fullscreen graph view */
+.graph-wrap:fullscreen,
+.graph-wrap.fullscreen {
+  width: 100vw; height: 100vh; min-height: 0;
+  background: var(--bg, #0b0f17);
+}
