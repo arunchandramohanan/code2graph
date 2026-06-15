@@ -79,7 +79,8 @@ export default function GraphExplorer() {
     setLoading(true);
     setError(null);
     try {
-      const params = { limit: 300 };
+      // The call graph spans every method, so it needs a much higher node cap.
+      const params = { limit: view === 'callgraph' ? 2000 : 300 };
       if (project) params.project = project;
       if (focus) {
         params.nodeId = focus;
@@ -279,6 +280,7 @@ export default function GraphExplorer() {
           )}
           <GraphCanvas
             graph={displayGraph}
+            defaultLayout={view === 'callgraph' ? 'tree' : 'layered'}
             selectedId={selectedId}
             onNodeClick={(d) => setSelectedId(d.id)}
             onNodeDblClick={(d) => expandNode(d.id)}

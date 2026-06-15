@@ -2,6 +2,9 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../api';
 import { LabelBadge, StackBadge } from './Badges';
+import SequenceDiagram from './SequenceDiagram';
+
+const TRACEABLE = new Set(['Method', 'Endpoint', 'ApiCall']);
 
 const CORE_KEYS = new Set(['id', 'name', 'label', 'stack', 'fqn', 'project', 'filePath', 'startLine', 'endLine', 'hash']);
 
@@ -25,6 +28,8 @@ export default function NodeDrawer({ nodeId, onClose, onExpand, onFocusNode }) {
   const [data, setData] = useState(null);
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [seq, setSeq] = useState(null); // null = closed; {} | result while open
+  const [seqLoading, setSeqLoading] = useState(false);
 
   useEffect(() => {
     if (!nodeId) return;
@@ -47,6 +52,19 @@ export default function NodeDrawer({ nodeId, onClose, onExpand, onFocusNode }) {
       cancelled = true;
     };
   }, [nodeId]);
+
+  const generateSequence = async (n) => {
+    setSeq({});
+    setSeqLoading(true);
+    try {
+      const res = await api.sequence({ project: n.project, nodeId: n.id });
+      setSeq(res || {});
+    } catch (err) {
+      setSeq({ error: err.message });
+    } finally {
+      setSeqLoading(false);
+    }
+  };
 
   if (!nodeId) return null;
 
@@ -102,6 +120,11 @@ export default function NodeDrawer({ nodeId, onClose, onExpand, onFocusNode }) {
               >
                 Impact analysis
               </button>
+              {TRACEABLE.has(node.label) && (
+                <button className="btn" onClick={() => generateSequence(node)}>
+                  Sequence diagram
+                </button>
+              )}
             </div>
 
             <h4 className="drawer-section">Properties</h4>
@@ -142,6 +165,39 @@ export default function NodeDrawer({ nodeId, onClose, onExpand, onFocusNode }) {
           </>
         )}
       </div>
+
+      {seq !== null && (
+        <div className="seq-overlay" onClick={() => setSeq(null)}>
+          <div className="seq-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="seq-modal-head">
+              <div className="mono">
+                Sequence — {node ? node.name : ''}
+                {seq.root ? (
+                  <span className="muted small">
+                    {' '}({seq.participants.length} participants, {seq.steps.length} calls
+                    {seq.truncated ? ', truncated' : ''})
+                  </span>
+                ) : null}
+              </div>
+              <button className="btn btn-icon" onClick={() => setSeq(null)} title="Close">×</button>
+            </div>
+            <div className="seq-modal-body">
+              {seqLoading && <div className="loading">Tracing…</div>}
+              {!seqLoading && seq.error && <div className="error-box">{seq.error}</div>}
+              {!seqLoading && !seq.error && (!seq.root || !seq.steps?.length) && (
+                <div className="empty-state">
+                  {seq.note
+                    || 'No resolved calls to trace from here. (Controller→service calls are '
+                       + 'often unresolved by static analysis — try a service method.)'}
+                </div>
+              )}
+              {!seqLoading && seq.root && seq.steps?.length > 0 && (
+                <SequenceDiagram data={seq} />
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </aside>
   );
 }

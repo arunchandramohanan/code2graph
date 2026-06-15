@@ -179,15 +179,30 @@ function layeredPositions(nodes, edges) {
   return pos;
 }
 
-export default function GraphCanvas({ graph, onNodeClick, onNodeDblClick, selectedId, emptyMessage }) {
+const LAYOUT_CYCLE = { layered: 'force', force: 'tree', tree: 'layered' };
+const LAYOUT_ICON = { layered: '⤓', force: '✸', tree: '⌗' };
+const LAYOUT_TITLE = {
+  layered: 'Layered (top→bottom). Click for force layout',
+  force: 'Force layout. Click for tree layout',
+  tree: 'Tree / call-depth layout. Click for layered',
+};
+
+export default function GraphCanvas({
+  graph, onNodeClick, onNodeDblClick, selectedId, emptyMessage, defaultLayout = 'layered',
+}) {
   const containerRef = useRef(null);
   const wrapRef = useRef(null);
   const cyRef = useRef(null);
   const clickRef = useRef(null);
   const dblRef = useRef(null);
   const lastTapRef = useRef({ id: null, time: 0 });
-  const [layoutMode, setLayoutMode] = useState('layered');
+  const [layoutMode, setLayoutMode] = useState(defaultLayout);
   const [isFullscreen, setIsFullscreen] = useState(false);
+
+  // Adopt the per-view preferred layout when it changes (e.g. switching to Call graph).
+  useEffect(() => {
+    setLayoutMode(defaultLayout);
+  }, [defaultLayout]);
   const layoutModeRef = useRef(layoutMode);
   layoutModeRef.current = layoutMode;
   clickRef.current = onNodeClick;
@@ -204,6 +219,16 @@ export default function GraphCanvas({ graph, onNodeClick, onNodeDblClick, select
         positions: (n) => pos[n.id()] || { x: 0, y: 0 },
         fit: true,
         padding: 45,
+      }).run();
+    } else if (mode === 'tree') {
+      // call-depth tree: ranks nodes by distance from entry points (no incoming flow edge)
+      cy.layout({
+        name: 'breadthfirst',
+        directed: true,
+        grid: true,
+        spacingFactor: 1.32,
+        padding: 45,
+        avoidOverlap: true,
       }).run();
     } else {
       cy.layout({
@@ -368,10 +393,10 @@ export default function GraphCanvas({ graph, onNodeClick, onNodeDblClick, select
       <div className="graph-controls">
         <button
           className="btn btn-icon graph-layout-toggle"
-          onClick={() => setLayoutMode((m) => (m === 'layered' ? 'force' : 'layered'))}
-          title={layoutMode === 'layered' ? 'Layered (top→bottom). Click for force layout' : 'Force layout. Click for layered'}
+          onClick={() => setLayoutMode((m) => LAYOUT_CYCLE[m] || 'layered')}
+          title={LAYOUT_TITLE[layoutMode]}
         >
-          {layoutMode === 'layered' ? '⤓' : '✸'}
+          {LAYOUT_ICON[layoutMode] || '⤓'}
         </button>
         <button className="btn btn-icon" onClick={() => zoom(1.3)} title="Zoom in">+</button>
         <button className="btn btn-icon" onClick={() => zoom(1 / 1.3)} title="Zoom out">−</button>

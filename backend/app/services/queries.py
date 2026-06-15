@@ -50,6 +50,12 @@ VIEW_PRESETS = {
         "where": "n.label IN ['Scenario','Route','Component','Endpoint','Entity','Table']",
         "edges": ["COVERS", "NAVIGATES_TO", "MAPS_TO"],
     },
+    # Whole-project method call graph, including the cross-stack hops
+    # (Angular method -> ApiCall -> Endpoint -> backend method).
+    "callgraph": {
+        "where": "n.label IN ['Method','Endpoint','ApiCall']",
+        "edges": ["CALLS", "HANDLED_BY", "MAKES_CALL", "INVOKES_API"],
+    },
 }
 
 

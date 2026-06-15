@@ -63,4 +63,5 @@ export const api = {
   ask: (body) => request('/api/ask', { method: 'POST', body: JSON.stringify(body) }),
   askSuggestions: (project) => request(`/api/ask/suggestions${qs({ project })}`),
   nodeByPath: (params) => request(`/api/nodes/by-path${qs(params)}`),
+  sequence: (params) => request(`/api/sequence${qs(params)}`),
 };

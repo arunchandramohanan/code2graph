@@ -6,7 +6,7 @@ from pydantic import BaseModel
 from . import db, jobs
 from .config import settings
 from .services import (
-    ask, enrich, extractors, github, ingest, linker, physical, queries, scenarios,
+    ask, diagrams, enrich, extractors, github, ingest, linker, physical, queries, scenarios,
 )
 
 router = APIRouter(prefix="/api")
@@ -319,6 +319,11 @@ def build_scenarios(req: ScenariosRequest):
 @router.get("/scenarios")
 def get_scenarios(project: str):
     return scenarios.list_scenarios(project)
+
+
+@router.get("/sequence")
+def sequence(project: str, nodeId: str):
+    return diagrams.sequence(project, nodeId)
 
 
 class AskRequest(BaseModel):

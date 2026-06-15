@@ -624,3 +624,30 @@ input[type='checkbox'] { accent-color: var(--accent); }
   width: 100vw; height: 100vh; min-height: 0;
   background: var(--bg, #0b0f17);
 }
+
+
+/* sequence diagram page */
+.seq-picker { position: relative; max-width: 640px; margin-bottom: 14px; }
+.seq-results { position: absolute; z-index: 20; left: 0; right: 0; margin-top: 4px;
+  background: var(--bg-elev, #141a24); border: 1px solid var(--border, #2d2d35);
+  border-radius: 8px; max-height: 320px; overflow-y: auto; }
+.seq-result { display: flex; align-items: center; gap: 8px; width: 100%; text-align: left;
+  background: transparent; border: none; border-bottom: 1px solid #1f2630; cursor: pointer;
+  padding: 7px 10px; color: var(--text, #e5e7eb); font-size: 13px; }
+.seq-result:hover { background: #1d2530; }
+.seq-result .ellipsis { margin-left: auto; max-width: 240px; }
+.seq-result-head { margin: 6px 0 12px; font-size: 13px; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.seq-scroll { overflow: auto; border: 1px solid var(--border, #2d2d35); border-radius: 10px;
+  background: #0b0f17; max-height: calc(100vh - 280px); }
+.seq-svg { display: block; }
+
+
+/* sequence diagram overlay (launched from node drawer) */
+.seq-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.6); z-index: 60;
+  display: flex; align-items: center; justify-content: center; padding: 32px; }
+.seq-modal { background: var(--bg, #0b0f17); border: 1px solid var(--border, #2d2d35);
+  border-radius: 12px; width: min(1100px, 92vw); max-height: 88vh; display: flex; flex-direction: column; }
+.seq-modal-head { display: flex; align-items: center; justify-content: space-between;
+  padding: 12px 16px; border-bottom: 1px solid var(--border, #2d2d35); }
+.seq-modal-body { overflow: auto; padding: 14px; }
+.seq-svg { display: block; }

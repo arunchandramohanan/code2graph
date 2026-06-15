@@ -7,6 +7,7 @@ import com.github.javaparser.ast.body.*;
 import com.github.javaparser.ast.expr.AnnotationExpr;
 import com.github.javaparser.ast.expr.ArrayInitializerExpr;
 import com.github.javaparser.ast.expr.Expression;
+import com.github.javaparser.ast.expr.FieldAccessExpr;
 import com.github.javaparser.ast.expr.MethodCallExpr;
 import com.github.javaparser.ast.expr.NormalAnnotationExpr;
 import com.github.javaparser.ast.expr.SingleMemberAnnotationExpr;
@@ -34,6 +35,15 @@ public class Extractor {
     private final Map<String, TypeInfo> projectTypes = new LinkedHashMap<>(); // fqn -> info
     private final Map<String, String> simpleToFqn = new HashMap<>();          // simple name -> fqn (first wins)
     private final List<Parsed> parsed = new ArrayList<>();
+
+    // For the injection-aware CALLS fallback (used when symbol solving fails):
+    // typeFqn -> methodName -> candidate methods, and typeFqn -> fieldName -> field's project type.
+    private final Map<String, Map<String, List<MethodRef>>> methodIndex = new HashMap<>();
+    private final Map<String, Map<String, String>> fieldTypes = new HashMap<>();
+    private final List<DeferredCalls> deferredCalls = new ArrayList<>();
+
+    private record MethodRef(String id, int params) {}
+    private record DeferredCalls(MethodDeclaration md, String callerId, String ownerFqn) {}
 
     private static final Set<String> CONTROLLER_ANN = Set.of("RestController", "Controller");
     private static final Set<String> SERVICE_ANN = Set.of("Service", "Component", "Configuration");
@@ -90,6 +100,15 @@ public class Extractor {
                 extractFromUnit(p);
             } catch (Exception e) {
                 doc.warnings.add("extraction failed for " + p.relPath + ": " + e);
+            }
+        }
+
+        // pass 3: method calls (now that every method node + index exists)
+        for (DeferredCalls dc : deferredCalls) {
+            try {
+                extractCalls(dc.md(), dc.callerId(), dc.ownerFqn());
+            } catch (Exception ignored) {
+                // never let one method abort the run
             }
         }
 
@@ -218,8 +237,32 @@ public class Extractor {
             extractProcessSemantics(md, mn, classTransactional, typeNode);
             doc.addNode(mn);
             doc.addEdge(typeNode.id, methodId, "DECLARES");
-            extractCalls(md, methodId);
+            // index for the call-resolution fallback; defer CALLS until all methods exist
+            methodIndex.computeIfAbsent(typeFqn, k -> new HashMap<>())
+                    .computeIfAbsent(md.getNameAsString(), k -> new ArrayList<>())
+                    .add(new MethodRef(methodId, md.getParameters().size()));
+            deferredCalls.add(new DeferredCalls(md, methodId, typeFqn));
             extractPublishes(md, mn.id, td);
+        }
+        recordFieldTypes(td, typeFqn);
+    }
+
+    /** field/constructor-param name -> project-local type fqn, for the CALLS fallback. */
+    private void recordFieldTypes(TypeDeclaration<?> td, String typeFqn) {
+        Map<String, String> map = fieldTypes.computeIfAbsent(typeFqn, k -> new HashMap<>());
+        for (FieldDeclaration fd : td.getFields()) {
+            String target = resolveProjectType(baseTypeName(fd.getElementType()));
+            if (target != null) {
+                for (VariableDeclarator v : fd.getVariables()) {
+                    map.put(v.getNameAsString(), target);
+                }
+            }
+        }
+        for (ConstructorDeclaration cd : td.getConstructors()) {
+            for (Parameter param : cd.getParameters()) {
+                String target = resolveProjectType(baseTypeName(param.getType()));
+                if (target != null) map.put(param.getNameAsString(), target);
+            }
         }
     }
 
@@ -306,21 +349,74 @@ public class Extractor {
         }
     }
 
-    private void extractCalls(MethodDeclaration md, String callerId) {
+    private void extractCalls(MethodDeclaration md, String callerId, String ownerFqn) {
         for (MethodCallExpr call : md.findAll(MethodCallExpr.class)) {
+            String targetId = null;
+            boolean heuristic = false;
             try {
                 ResolvedMethodDeclaration r = call.resolve();
                 String declType = r.declaringType().getQualifiedName();
-                if (!projectTypes.containsKey(declType)) continue;
-                String targetId = "java:" + declType + "#" + r.getSignature();
-                Model.Edge e = doc.addEdge(callerId, targetId, "CALLS");
-                if (e != null) {
-                    call.getRange().ifPresent(range -> e.props.put("line", range.begin.line));
+                if (projectTypes.containsKey(declType)) {
+                    targetId = "java:" + declType + "#" + r.getSignature();
                 }
             } catch (Throwable ignored) {
-                // unresolvable (third-party, lambdas, generics edge cases) — skip silently
+                // fall through to the injection-aware heuristic below
+            }
+            if (targetId == null) {
+                targetId = resolveByInjection(call, ownerFqn);
+                heuristic = targetId != null;
+            }
+            if (targetId == null) continue;
+            Model.Edge e = doc.addEdge(callerId, targetId, "CALLS");
+            if (e != null) {
+                call.getRange().ifPresent(range -> e.props.put("line", range.begin.line));
+                if (heuristic) e.props.put("resolved", "heuristic");
             }
         }
+    }
+
+    /**
+     * Fallback when symbol solving fails: resolve `this.field.method(args)` or
+     * `field.method(args)` where `field` is an injected/declared field (or constructor
+     * param) of a known project type, matching the method by name + arg count.
+     * Also resolves bare `this.method(args)` calls to the owning class.
+     */
+    private String resolveByInjection(MethodCallExpr call, String ownerFqn) {
+        Expression scope = call.getScope().orElse(null);
+        String targetType = null;
+        if (scope == null || scope.isThisExpr()) {
+            targetType = ownerFqn; // this.method() or unqualified own-method call
+        } else if (scope.isNameExpr()) {
+            targetType = fieldTypeOf(ownerFqn, scope.asNameExpr().getNameAsString());
+        } else if (scope.isFieldAccessExpr()) {
+            FieldAccessExpr fa = scope.asFieldAccessExpr();
+            if (fa.getScope().isThisExpr()) {
+                targetType = fieldTypeOf(ownerFqn, fa.getNameAsString());
+            }
+        }
+        if (targetType == null) return null;
+
+        Map<String, List<MethodRef>> byName = methodIndex.get(targetType);
+        if (byName == null) return null;
+        List<MethodRef> candidates = byName.get(call.getNameAsString());
+        if (candidates == null || candidates.isEmpty()) return null;
+        int argc = call.getArguments().size();
+        MethodRef byArity = null;
+        int arityMatches = 0;
+        for (MethodRef ref : candidates) {
+            if (ref.params() == argc) {
+                byArity = ref;
+                arityMatches++;
+            }
+        }
+        if (arityMatches == 1) return byArity.id();
+        if (candidates.size() == 1) return candidates.get(0).id();
+        return null; // ambiguous overload — don't guess
+    }
+
+    private String fieldTypeOf(String ownerFqn, String fieldName) {
+        Map<String, String> map = fieldTypes.get(ownerFqn);
+        return map == null ? null : map.get(fieldName);
     }
 
     // ------------------------------------------------------------- hierarchy + DI

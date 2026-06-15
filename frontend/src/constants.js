@@ -52,12 +52,8 @@ export const EDGE_TYPES = [
 
 // 4+1 architectural view presets (server-side filters via ?view=)
 export const VIEWS = [
-  { key: '', name: 'Custom (filters)' },
   { key: 'logical', name: 'Logical view' },
-  { key: 'development', name: 'Development view' },
-  { key: 'process', name: 'Process view' },
-  { key: 'physical', name: 'Physical view' },
-  { key: 'scenarios', name: 'Scenarios (+1)' },
+  { key: 'callgraph', name: 'Call graph' },
 ];
 
 // Labels shown by default in the Graph Explorer architecture view.
