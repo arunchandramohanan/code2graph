@@ -257,6 +257,24 @@ def impact(node_id: str, direction: str = "both", depth: int = Query(3, ge=1, le
     return queries.impact(node_id, direction, depth)
 
 
+class BlastRadiusRequest(BaseModel):
+    seeds: list[str] = []        # node ids picked via search
+    cypher: str | None = None    # read-only predicate selecting vulnerable classes
+    params: dict | None = None
+    depth: int = 3
+
+
+@router.post("/blast-radius")
+def blast_radius(req: BlastRadiusRequest):
+    """Upstream blast radius of a vulnerable class: everything that depends on it,
+    plus the externally-reachable entry points it exposes."""
+    depth = max(1, min(req.depth, 6))
+    try:
+        return queries.blast_radius(req.seeds, req.cypher, req.params, depth)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc))
+
+
 @router.get("/links")
 def links(project: str, minConfidence: float = Query(0.0, ge=0.0, le=1.0)):
     return queries.links(project, minConfidence)

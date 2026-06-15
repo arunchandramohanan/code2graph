@@ -120,6 +120,16 @@ export default function NodeDrawer({ nodeId, onClose, onExpand, onFocusNode }) {
               >
                 Impact analysis
               </button>
+              <button
+                className="btn"
+                onClick={() =>
+                  navigate(`/impact?mode=blast&node=${encodeURIComponent(node.id)}`, {
+                    state: { nodeName: node.name, nodeLabel: node.label },
+                  })
+                }
+              >
+                Blast radius
+              </button>
               {TRACEABLE.has(node.label) && (
                 <button className="btn" onClick={() => generateSequence(node)}>
                   Sequence diagram

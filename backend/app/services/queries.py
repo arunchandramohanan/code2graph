@@ -395,6 +395,144 @@ def impact(node_id: str, direction: str, depth: int) -> dict:
     return {"nodes": list(nodes.values()), "edges": list(edges.values())}
 
 
+# Labels that represent an externally-reachable entry point: a place where the
+# blast radius of a vulnerable class becomes part of the attack surface.
+ENTRY_POINT_LABELS = ("Endpoint", "Controller", "Route", "Component")
+
+# Packaging/container nodes — not "dependents", just where code lives. Dropped
+# from the blast radius so the affected count reflects real code, not structure.
+STRUCTURAL_LABELS = ("File", "Application", "Module")
+
+
+def resolve_blast_seeds(seeds: list[str] | None, cypher: str | None,
+                        params: dict | None) -> list[str]:
+    """Resolve the vulnerable class(es) to a de-duplicated list of node ids.
+
+    Accepts explicit node ids (from the search picker) and/or a read-only Cypher
+    predicate whose result columns carry node ids — either a column literally named
+    `id` or a returned node/map with an `id` property (e.g.
+    `MATCH (n:CodeNode) WHERE 'log4j' IN n.imports RETURN n`)."""
+    ids: list[str] = []
+    seen: set[str] = set()
+
+    def _add(value):
+        if isinstance(value, str) and value and value not in seen:
+            seen.add(value)
+            ids.append(value)
+
+    for s in seeds or []:
+        _add(s)
+    if cypher:
+        res = read_cypher(cypher, params)  # raises on write/forbidden cypher
+        cols = res["columns"]
+        for row in res["rows"]:
+            for col, val in zip(cols, row):
+                if isinstance(val, dict):
+                    _add(val.get("id"))
+                elif col == "id":
+                    _add(val)
+    return ids
+
+
+def blast_radius(seeds: list[str] | None, cypher: str | None,
+                 params: dict | None, depth: int) -> dict:
+    """Upstream impact ("what depends on it") from one or more vulnerable classes,
+    with the affected entry points (the exposed attack surface) called out."""
+    seed_ids = resolve_blast_seeds(seeds, cypher, params)
+    if not seed_ids:
+        raise ValueError(
+            "no vulnerable class selected — pass seed node ids and/or a cypher "
+            "query whose results carry node ids"
+        )
+    depth = max(1, min(depth, 6))
+    # Dependency edges (CALLS) live at the Method level, so expand each seed class
+    # to the methods it declares and traverse upstream from the whole set — that is
+    # what surfaces the real callers (and, transitively, the exposed entry points).
+    rows = db.run(
+        f"""
+        MATCH (seed:CodeNode) WHERE seed.id IN $ids
+        OPTIONAL MATCH (seed)-[:DECLARES]->(mem:Method)
+        WITH collect(DISTINCT seed) AS seeds,
+             [x IN collect(DISTINCT mem) WHERE x IS NOT NULL] AS members
+        WITH seeds, members, seeds + members AS starts
+        UNWIND starts AS start
+        CALL {{
+            WITH start
+            MATCH p = (start)<-[:{IMPACT_TYPES}*1..{depth}]-(m:CodeNode)
+            RETURN m, min(length(p)) AS distance, collect(DISTINCT relationships(p)) AS relLists
+            LIMIT 2000
+        }}
+        WITH seeds, members,
+             collect({{node: properties(m), distance: distance}}) AS hits,
+             reduce(acc = [], l IN collect(relLists) | acc + reduce(a2 = [], x IN l | a2 + x)) AS allRels
+        RETURN [s IN seeds | properties(s)] AS seedNodes,
+               [m IN members | properties(m)] AS memberNodes, hits,
+               [r IN allRels | [startNode(r).id, type(r), properties(r), endNode(r).id]] AS rels
+        """,
+        ids=seed_ids,
+    )
+    if not rows or not rows[0]["seedNodes"]:
+        return {"seeds": [], "nodes": [], "edges": [], "entryPoints": [],
+                "counts": {"affected": 0, "entryPoints": 0, "byLabel": {}}}
+    row = rows[0]
+    seed_id_set = {n["id"] for n in (row["seedNodes"] or []) if n and n.get("id")}
+    member_id_set = {n["id"] for n in (row["memberNodes"] or []) if n and n.get("id")}
+    vuln_id_set = seed_id_set | member_id_set  # the vulnerable unit itself
+    nodes: dict[str, dict] = {}
+    for sn in row["seedNodes"]:
+        n = _node_payload(sn)
+        n["distance"] = 0
+        n["isSeed"] = True
+        n["isEntryPoint"] = n.get("label") in ENTRY_POINT_LABELS
+        nodes[n["id"]] = n
+    for mn in row["memberNodes"]:
+        n = _node_payload(mn)
+        if n["id"] in nodes:
+            continue
+        n["distance"] = 0
+        n["isMember"] = True  # a method of the vulnerable class — part of the unit
+        nodes[n["id"]] = n
+    for hit in row["hits"]:
+        if not hit.get("node"):
+            continue
+        n = _node_payload(hit["node"])
+        if n["id"] in vuln_id_set or n.get("label") in STRUCTURAL_LABELS:
+            continue  # skip the vulnerable unit and structural containers
+        n["distance"] = hit["distance"]
+        n["isSeed"] = False
+        n["isEntryPoint"] = n.get("label") in ENTRY_POINT_LABELS
+        existing = nodes.get(n["id"])
+        if not existing or existing.get("distance", 99) > n["distance"]:
+            nodes[n["id"]] = n
+    ids = set(nodes)
+    edges: dict[str, dict] = {}
+    for src, rel_type, props, tgt in row["rels"] or []:
+        if src in ids and tgt in ids:
+            key = f"{src}|{rel_type}|{tgt}"
+            edges.setdefault(key, {"id": key, "source": src, "target": tgt,
+                                   "type": rel_type, "props": props or {}})
+    affected = [n for n in nodes.values()
+                if not n.get("isSeed") and not n.get("isMember")]
+    entry_points = sorted(
+        (n for n in affected if n.get("isEntryPoint")),
+        key=lambda n: (n.get("distance", 99), n.get("label") or "", n.get("name") or ""),
+    )
+    by_label: dict[str, int] = {}
+    for n in affected:
+        by_label[n["label"]] = by_label.get(n["label"], 0) + 1
+    return {
+        "seeds": [n for n in nodes.values() if n.get("isSeed")],
+        "nodes": list(nodes.values()),
+        "edges": list(edges.values()),
+        "entryPoints": entry_points,
+        "counts": {
+            "affected": len(affected),
+            "entryPoints": len(entry_points),
+            "byLabel": by_label,
+        },
+    }
+
+
 def links(project: str, min_confidence: float) -> dict:
     rows = db.run(
         """

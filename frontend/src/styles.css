@@ -390,6 +390,24 @@ input[type='checkbox'] { accent-color: var(--accent); }
 .impact-graph { height: 420px; border: 1px solid var(--border); border-radius: 10px; overflow: hidden; margin-bottom: 22px; background: var(--bg-raised); }
 .distance-head { font-size: 13.5px; }
 
+/* Impact / Blast-radius mode toggle */
+.seg-toggle { display: inline-flex; gap: 0; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+.seg-toggle .btn-small { border: none; border-radius: 0; background: transparent; }
+.seg-toggle .btn-small.active { background: rgba(239, 68, 68, 0.16); color: #fecaca; }
+
+/* Blast radius controls */
+.blast-controls .btn-link { background: none; border: none; color: var(--accent-hover); padding: 4px 0; align-self: flex-start; }
+.seed-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.seed-chip {
+  display: inline-flex; align-items: center; gap: 6px; max-width: 240px;
+  padding: 3px 6px 3px 4px; border: 1px solid #ef4444; border-radius: 999px;
+  background: rgba(239, 68, 68, 0.1); font-size: 12px;
+}
+.seed-chip .chip-x { background: none; border: none; color: #fca5a5; cursor: pointer; font-size: 14px; line-height: 1; padding: 0 2px; }
+.cypher-field { margin-top: 8px; }
+.cypher-field textarea { width: 100%; resize: vertical; }
+.entrypoint-panel { border: 1px solid #ef4444; border-radius: 10px; padding: 12px 14px; background: rgba(239, 68, 68, 0.06); }
+
 .node-picker { position: relative; }
 .picker-hint { position: absolute; right: 10px; top: 9px; font-size: 11px; }
 .picker-dropdown {

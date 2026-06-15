@@ -50,6 +50,8 @@ export const api = {
   node: (id) => request(`/api/nodes/${encodeURIComponent(id)}`),
   search: (params) => request(`/api/search${qs(params)}`),
   impact: (id, params) => request(`/api/impact/${encodeURIComponent(id)}${qs(params)}`),
+  blastRadius: (body) =>
+    request('/api/blast-radius', { method: 'POST', body: JSON.stringify(body) }),
   links: (params) => request(`/api/links${qs(params)}`),
   relink: (project) =>
     request('/api/links/relink', { method: 'POST', body: JSON.stringify({ project }) }),

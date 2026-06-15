@@ -39,6 +39,11 @@ const STYLE = [
     selector: 'node:selected',
     style: { 'border-width': 3, 'border-color': '#f8fafc' },
   },
+  // Vulnerable "seed" nodes in a blast-radius view: a red ring.
+  {
+    selector: 'node.seed',
+    style: { 'border-width': 4, 'border-color': '#ef4444' },
+  },
   // Highlight a hovered node and its neighbours.
   {
     selector: 'node.hl',
@@ -189,6 +194,7 @@ const LAYOUT_TITLE = {
 
 export default function GraphCanvas({
   graph, onNodeClick, onNodeDblClick, selectedId, emptyMessage, defaultLayout = 'layered',
+  highlightIds,
 }) {
   const containerRef = useRef(null);
   const wrapRef = useRef(null);
@@ -328,6 +334,17 @@ export default function GraphCanvas({
     const cy = cyRef.current;
     if (cy) applyLayout(cy, layoutMode);
   }, [layoutMode]);
+
+  // Reflect seed highlighting (vulnerable nodes in a blast-radius view).
+  useEffect(() => {
+    const cy = cyRef.current;
+    if (!cy) return;
+    cy.nodes('.seed').removeClass('seed');
+    (highlightIds || []).forEach((id) => {
+      const el = cy.getElementById(id);
+      if (el && el.length) el.addClass('seed');
+    });
+  }, [highlightIds, graph]);
 
   // Reflect external selection.
   useEffect(() => {
