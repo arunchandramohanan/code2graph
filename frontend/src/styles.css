@@ -329,7 +329,18 @@ input[type='checkbox'] { accent-color: var(--accent); }
 .legend-swatch { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
 .swatch-square { background: transparent; border: 1.5px solid var(--muted); border-radius: 3px; }
 .swatch-circle { background: transparent; border: 1.5px solid var(--muted); border-radius: 50%; }
+.swatch-diamond { background: transparent; border: 1.5px solid var(--muted); border-radius: 1px; transform: rotate(45deg); width: 9px; height: 9px; }
+.swatch-hexagon { background: var(--muted); border-radius: 0; width: 12px; height: 11px; clip-path: polygon(25% 0, 75% 0, 100% 50%, 75% 100%, 25% 100%, 0 50%); }
 .legend-dash { width: 18px; border-top: 2px dashed #ec4899; flex-shrink: 0; }
+
+.source-block { margin: 12px 0 4px; }
+.source-meta { margin-bottom: 6px; }
+.source-code {
+  margin: 0; padding: 10px 12px; background: var(--bg-raised, #0b0f17);
+  border: 1px solid var(--border); border-radius: 8px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px;
+  line-height: 1.5; color: #cbd5e1; white-space: pre; overflow: auto; max-height: 460px;
+}
 .legend-notes { margin-top: 10px; display: flex; flex-direction: column; gap: 4px; }
 
 /* ---------- drawer ---------- */

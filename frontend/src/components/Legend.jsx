@@ -25,6 +25,14 @@ export default function Legend({ labels }) {
           <span>angular (circle)</span>
         </div>
         <div className="legend-item">
+          <span className="legend-swatch swatch-diamond" />
+          <span>system / dependency (diamond)</span>
+        </div>
+        <div className="legend-item">
+          <span className="legend-swatch swatch-hexagon" />
+          <span>infra (hexagon)</span>
+        </div>
+        <div className="legend-item">
           <span className="legend-dash" />
           <span>INVOKES_API (cross-stack)</span>
         </div>

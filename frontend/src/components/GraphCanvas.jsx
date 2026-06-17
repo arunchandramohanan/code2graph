@@ -109,6 +109,7 @@ const STYLE = [
 
 // Vertical tier per node: Angular at the top, ApiCall in the middle, backend below.
 function tierOf(stack, label) {
+  if (label === 'Dependency') return 11; // external libraries are leaves: bottom row
   if (stack === 'system') return 0; // Scenario
   if (stack === 'angular') {
     if (label === 'Route') return 0;

@@ -1,6 +1,7 @@
 """Read queries powering the API: overview, subgraph, search, impact, links."""
 
 import re
+from pathlib import Path
 
 from .. import db
 
@@ -13,7 +14,7 @@ BASE_KEYS = (
 IMPACT_TYPES = (
     "CALLS|INJECTS|EXPOSES|HANDLED_BY|MAKES_CALL|INVOKES_API|ACCEPTS|RETURNS|"
     "MAPS_TO|RELATES_TO|READS|WRITES|MANAGES|RENDERS|BINDS|USES_TEMPLATE|"
-    "NAVIGATES_TO|EXTENDS|IMPLEMENTS|DECLARES"
+    "NAVIGATES_TO|EXTENDS|IMPLEMENTS|DECLARES|USES_DEPENDENCY"
 )
 
 ARCH_LABELS = ["Controller", "Service", "Component", "Endpoint", "Entity", "Repository", "ApiCall"]
@@ -22,7 +23,7 @@ ARCH_LABELS = ["Controller", "Service", "Component", "Endpoint", "Entity", "Repo
 VIEW_PRESETS = {
     "logical": {
         "where": "n.label IN ['Controller','Service','Component','Endpoint','Entity',"
-                 "'DTO','Repository','ApiCall','Route']",
+                 "'DTO','Repository','ApiCall','Route','Dependency']",
         "edges": None,  # all edges between the selected nodes
         # Collapse the (excluded) Method hop into direct class-level edges so the
         # high-level view doesn't fragment: Service/Component -> ApiCall and
@@ -281,6 +282,46 @@ def subgraph(project: str, node_id: str | None, depth: int, labels: list[str] | 
         ids = {n["id"] for n in payload["nodes"]}
         payload["edges"] = [e for e in payload["edges"] if e["source"] in ids and e["target"] in ids]
     return payload
+
+
+def node_source(node_id: str, context: int = 0) -> dict:
+    """Read the source slice (filePath + line range) for a node, on demand from
+    the recorded project root — so e.g. a Method node can show its Java code."""
+    rows = db.run("MATCH (n:CodeNode {id: $id}) RETURN properties(n) AS n", id=node_id)
+    if not rows or not rows[0]["n"]:
+        return {"error": "no such node"}
+    node = rows[0]["n"]
+    rr = db.run(
+        "MATCH (p:Project {name: $p}) RETURN p.javaRoot AS j, p.angularRoot AS a",
+        p=node.get("project"),
+    )
+    roots = {"java": rr[0]["j"], "angular": rr[0]["a"]} if rr else {}
+    root = roots.get(node.get("stack"))
+    fp = node.get("filePath")
+    if not root:
+        return {"error": f"no source root recorded for stack '{node.get('stack')}' "
+                         "— re-ingest the project to enable source view"}
+    if not fp:
+        return {"error": "node has no source file"}
+    path = Path(root) / fp
+    if not path.is_file():
+        return {"error": f"source file not found: {fp}"}
+    try:
+        lines = path.read_text(errors="replace").splitlines()
+    except OSError as exc:
+        return {"error": str(exc)}
+    n_lines = len(lines)
+    start = max(0, int(node.get("startLine", 1) or 1) - 1 - context)
+    end = int(node.get("endLine", 0) or 0) or n_lines
+    end = min(n_lines, max(end + context, start + 1))
+    lang = {"java": "java", "angular": "typescript"}.get(node.get("stack"), "")
+    return {
+        "filePath": fp,
+        "startLine": start + 1,
+        "endLine": end,
+        "language": lang,
+        "source": "\n".join(lines[start:end])[:20000],
+    }
 
 
 def node_detail(node_id: str) -> dict | None:

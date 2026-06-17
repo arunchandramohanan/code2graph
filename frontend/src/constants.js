@@ -19,6 +19,7 @@ export const LABEL_COLORS = {
   Deployment: '#0ea5e9',
   Datasource: '#06b6d4',
   Scenario: '#f43f5e',
+  Dependency: '#d946ef',
 };
 
 export const DEFAULT_COLOR = '#6b7280';
@@ -38,7 +39,7 @@ export const NODE_LABELS = [
   'Application', 'Module', 'File', 'Class', 'Component', 'Service',
   'Controller', 'Endpoint', 'ApiCall', 'Method', 'DTO', 'Entity',
   'Table', 'Repository', 'Route', 'Template', 'Topic', 'Deployment',
-  'Datasource', 'Scenario',
+  'Datasource', 'Scenario', 'Dependency',
 ];
 
 export const EDGE_TYPES = [
@@ -48,6 +49,7 @@ export const EDGE_TYPES = [
   'MAPS_TO', 'RELATES_TO', 'READS', 'WRITES', 'MANAGES',
   'PUBLISHES_TO', 'CONSUMES_FROM', 'DEPLOYED_AS', 'CONNECTS_TO',
   'USES_DATASOURCE', 'PROVIDED_BY', 'HOSTS', 'COVERS',
+  'DECLARES_DEPENDENCY', 'USES_DEPENDENCY',
 ];
 
 // 4+1 architectural view presets (server-side filters via ?view=)

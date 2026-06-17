@@ -179,7 +179,7 @@ export default function GraphExplorer() {
             <ProjectSelect />
           </div>
           <div className="filter-group">
-            <span className="filter-group-title">Architectural view (4+1)</span>
+            <span className="filter-group-title">Architectural view</span>
             <select
               className="select"
               value={view}

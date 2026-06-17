@@ -30,6 +30,8 @@ export default function NodeDrawer({ nodeId, onClose, onExpand, onFocusNode }) {
   const [loading, setLoading] = useState(false);
   const [seq, setSeq] = useState(null); // null = closed; {} | result while open
   const [seqLoading, setSeqLoading] = useState(false);
+  const [source, setSource] = useState(null); // null = hidden; {} | result while open
+  const [srcLoading, setSrcLoading] = useState(false);
 
   useEffect(() => {
     if (!nodeId) return;
@@ -37,6 +39,7 @@ export default function NodeDrawer({ nodeId, onClose, onExpand, onFocusNode }) {
     setLoading(true);
     setError(null);
     setData(null);
+    setSource(null);
     api
       .node(nodeId)
       .then((d) => {
@@ -52,6 +55,23 @@ export default function NodeDrawer({ nodeId, onClose, onExpand, onFocusNode }) {
       cancelled = true;
     };
   }, [nodeId]);
+
+  const toggleSource = async (n) => {
+    if (source !== null) {
+      setSource(null);
+      return;
+    }
+    setSource({});
+    setSrcLoading(true);
+    try {
+      const res = await api.source(n.id);
+      setSource(res || {});
+    } catch (err) {
+      setSource({ error: err.message });
+    } finally {
+      setSrcLoading(false);
+    }
+  };
 
   const generateSequence = async (n) => {
     setSeq({});
@@ -135,7 +155,27 @@ export default function NodeDrawer({ nodeId, onClose, onExpand, onFocusNode }) {
                   Sequence diagram
                 </button>
               )}
+              {node.filePath && (
+                <button className="btn" onClick={() => toggleSource(node)}>
+                  {source !== null ? 'Hide source' : 'View source'}
+                </button>
+              )}
             </div>
+
+            {source !== null && (
+              <div className="source-block">
+                {srcLoading && <div className="loading">Loading source…</div>}
+                {!srcLoading && source.error && <div className="error-box">{source.error}</div>}
+                {!srcLoading && !source.error && source.source && (
+                  <>
+                    <div className="source-meta mono muted small">
+                      {source.filePath}:{source.startLine}–{source.endLine}
+                    </div>
+                    <pre className="source-code"><code>{source.source}</code></pre>
+                  </>
+                )}
+              </div>
+            )}
 
             <h4 className="drawer-section">Properties</h4>
             <table className="prop-table">

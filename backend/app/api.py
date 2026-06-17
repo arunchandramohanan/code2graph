@@ -6,7 +6,8 @@ from pydantic import BaseModel
 from . import db, jobs
 from .config import settings
 from .services import (
-    ask, diagrams, enrich, extractors, github, ingest, linker, physical, queries, scenarios,
+    ask, dependencies, diagrams, enrich, extractors, github, ingest, linker, physical,
+    queries, scenarios,
 )
 
 router = APIRouter(prefix="/api")
@@ -80,6 +81,13 @@ def _run_pipeline(job, project: str, java_path: str | None, angular_path: str | 
         stats = scenarios.build_scenarios(project)
         job.stats["scenarios"] = stats
         step.done(f"{stats['scenarios']} scenarios ({stats['llmNamed']} LLM-named)")
+    except Exception as exc:
+        step.fail(str(exc)[:200])
+    step = job.step("maven dependencies (pom.xml)")
+    try:
+        stats = dependencies.build_dependencies(project, roots.get("java"))
+        job.stats["dependencies"] = stats
+        step.done(f"{stats['dependencies']} dependencies, {stats['usageEdges']} usage edges")
     except Exception as exc:
         step.fail(str(exc)[:200])
     # remember source roots so ask/enrich can read code later
@@ -232,6 +240,14 @@ def node_by_path(project: str, path: str):
     return {"id": best["id"], "label": best["label"], "name": best["name"]}
 
 
+@router.get("/source")
+def node_source(nodeId: str, context: int = Query(0, ge=0, le=50)):
+    result = queries.node_source(nodeId, context)
+    if "error" in result:
+        raise HTTPException(404, result["error"])
+    return result
+
+
 @router.get("/nodes/{node_id:path}")
 def node_detail(node_id: str):
     detail = queries.node_detail(node_id)
@@ -337,6 +353,27 @@ def build_scenarios(req: ScenariosRequest):
 @router.get("/scenarios")
 def get_scenarios(project: str):
     return scenarios.list_scenarios(project)
+
+
+class DependenciesRequest(BaseModel):
+    project: str
+
+
+@router.post("/dependencies")
+def build_dependencies(req: DependenciesRequest):
+    rows = db.run(
+        "MATCH (p:Project {name: $p}) RETURN p.javaRoot AS javaRoot", p=req.project
+    )
+    java_root = rows[0]["javaRoot"] if rows else None
+
+    def work(job):
+        step = job.step("maven dependencies (pom.xml)")
+        stats = dependencies.build_dependencies(req.project, java_root)
+        job.stats["dependencies"] = stats
+        step.done(f"{stats['dependencies']} dependencies, {stats['usageEdges']} usage edges")
+
+    job = jobs.submit("dependencies", work)
+    return {"jobId": job.id}
 
 
 @router.get("/sequence")

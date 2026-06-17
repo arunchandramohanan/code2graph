@@ -58,6 +58,8 @@ export const api = {
   scenarios: (params) => request(`/api/scenarios${qs(params)}`),
   buildScenarios: (project) =>
     request('/api/scenarios', { method: 'POST', body: JSON.stringify({ project }) }),
+  buildDependencies: (project) =>
+    request('/api/dependencies', { method: 'POST', body: JSON.stringify({ project }) }),
   githubPrecheck: (repoUrl) =>
     request('/api/github/precheck', { method: 'POST', body: JSON.stringify({ repoUrl }) }),
   githubIngest: (body) =>
@@ -65,5 +67,6 @@ export const api = {
   ask: (body) => request('/api/ask', { method: 'POST', body: JSON.stringify(body) }),
   askSuggestions: (project) => request(`/api/ask/suggestions${qs({ project })}`),
   nodeByPath: (params) => request(`/api/nodes/by-path${qs(params)}`),
+  source: (nodeId, params) => request(`/api/source${qs({ nodeId, ...params })}`),
   sequence: (params) => request(`/api/sequence${qs(params)}`),
 };
